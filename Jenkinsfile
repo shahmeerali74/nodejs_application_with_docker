@@ -15,7 +15,7 @@ pipeline {
                 script {
                     def imageName = "node_application:latest"
 
-                    // Check if the Docker image already exists
+                    // Check if the Docker image already existss
                     def imageExists = sh(script: "docker images -q ${imageName}", returnStdout: true).trim()
 
                     if (imageExists) {
