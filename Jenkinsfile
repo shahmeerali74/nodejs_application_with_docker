@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    environment {
+        VERSION_FILE = 'version.txt'
+    }
+
     stages {
         stage('Checkout') {
             steps {
@@ -10,21 +14,27 @@ pipeline {
             }
         }
 
+        stage('Get Current Version') {
+            steps {
+                script {
+                    if (fileExists(VERSION_FILE)) {
+                        def currentVersion = readFile(VERSION_FILE).trim()
+                        env.VERSION = (currentVersion.toInteger() + 1).toString()
+                    } else {
+                        env.VERSION = '1'
+                    }
+                    echo "Building Docker image with version ${env.VERSION}."
+                }
+            }
+        }
+
         stage('Build Docker Image') {
             steps {
                 script {
-                    def imageName = "node_application:latest"
+                    def imageName = "nodeapp${env.VERSION}"
 
-                    // Check if the Docker image already existss
-                    def imageExists = sh(script: "docker images -q ${imageName}", returnStdout: true).trim()
-
-                    if (imageExists) {
-                        echo "Docker image '${imageName}' already exists. Skipping build."
-                    } else {
-                        echo "Docker image '${imageName}' does not exist. Building the image."
-                        // Build the Docker image
-                        sh "docker build -t ${imageName} ."
-                    }
+                    // Build the Docker image with the new version
+                    sh "docker build -t ${imageName} ."
                 }
             }
         }
@@ -32,8 +42,8 @@ pipeline {
         stage('Push Docker Image to Docker Hub') {
             steps {
                 script {
-                    def imageName = "node_application:latest"
-                    def dockerHubRepo = "shahmeerali/nodejs_application_with_docker" // Replace with your Docker Hub repo name
+                    def dockerHubRepo = "shahmeerali/nodejs_application_with_docker"
+                    def imageName = "nodeapp${env.VERSION}"
 
                     // Log in to Docker Hub
                     withCredentials([usernamePassword(credentialsId: 'Docker-hub', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
@@ -41,10 +51,38 @@ pipeline {
                     }
 
                     // Tag the image for Docker Hub
-                    sh "docker tag ${imageName} ${dockerHubRepo}:latest"
+                    sh "docker tag ${imageName} ${dockerHubRepo}:${imageName}"
 
                     // Push the image to Docker Hub
-                    sh "docker push ${dockerHubRepo}:latest"
+                    sh "docker push ${dockerHubRepo}:${imageName}"
+
+                    // Remove the local image with the `latest` tag if it exists
+                    sh """
+                        docker rmi -f nodeapp:latest || true
+                    """
+                }
+            }
+        }
+
+        stage('Clean Up Old Docker Images') {
+            steps {
+                script {
+                    def dockerHubRepo = "shahmeerali/nodejs_application_with_docker"
+
+                    // Clean up old images in Docker Hub (not tagged with the latest version)
+                    sh """
+                        # Get IDs of images to delete
+                        docker images --format "{{.Repository}}:{{.Tag}}" | grep '^nodeapp' | grep -v ':${env.VERSION}' | xargs -r docker rmi -f || true
+                    """
+                }
+            }
+        }
+
+        stage('Update Version File') {
+            steps {
+                script {
+                    // Update the version file with the new version number
+                    writeFile file: VERSION_FILE, text: "${env.VERSION}"
                 }
             }
         }
