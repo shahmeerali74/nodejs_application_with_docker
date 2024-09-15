@@ -3,7 +3,6 @@ pipeline {
 
     environment {
         VERSION_FILE = 'version.txt'
-        // Define the SonarQube environment variable
         SONAR_SCANNER_HOME = tool 'SonarScanner'
     }
 
@@ -19,7 +18,6 @@ pipeline {
         stage('SonarQube Scan') {
             steps {
                 script {
-                    // Running SonarQube analysis
                     withSonarQubeEnv('Sonarqube') {
                         sh """
                             ${SONAR_SCANNER_HOME}/bin/sonar-scanner \
@@ -91,12 +89,32 @@ pipeline {
 
                     // Clean up old images in Docker Hub (not tagged with the latest version)
                     sh """
-                        # Get IDs of images to delete
                         docker images --format "{{.Repository}}:{{.Tag}}" | grep '^nodeapp' | grep -v ':${env.VERSION}' | xargs -r docker rmi -f || true
                     """
                 }
             }
         }
+
+        stage('Deploy New Container') {
+    steps {
+        script {
+            def imageName = "shahmeerali/nodejs_application_with_docker:nodeapp${env.VERSION}"
+            def containerName = "nodeapp"
+
+            // Stop and remove the currently running container if it exists
+            sh """
+                docker stop ${containerName} || true
+                docker rm ${containerName} || true
+            """
+
+            // Run the new container with the versioned image
+            sh """
+                docker run -d --name ${containerName} -p 3000:3000 ${imageName}
+            """
+        }
+    }
+}
+
 
         stage('Update Version File') {
             steps {
