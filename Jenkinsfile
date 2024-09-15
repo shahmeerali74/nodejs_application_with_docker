@@ -4,11 +4,14 @@ pipeline {
     environment {
         VERSION_FILE = 'version.txt'
         SONAR_SCANNER_HOME = tool 'SonarScanner'
+        SLACK_CHANNEL = 'devops-jenkins-node-app'
+        SLACK_CREDENTIALS_ID = 'slack-credentials-id' // Define this in Jenkins' credentials
     }
 
     stages {
         stage('Checkout') {
             steps {
+                slackSend(channel: "${SLACK_CHANNEL}", message: "Checkout started", tokenCredentialId: "${SLACK_CREDENTIALS_ID}")
                 git branch: 'master',
                     credentialsId: 'github-credential',
                     url: "https://github.com/shahmeerali74/nodejs_application_with_docker.git"
@@ -18,6 +21,7 @@ pipeline {
         stage('SonarQube Scan') {
             steps {
                 script {
+                    slackSend(channel: "${SLACK_CHANNEL}", message: "SonarQube scan started", tokenCredentialId: "${SLACK_CREDENTIALS_ID}")
                     withSonarQubeEnv('Sonarqube') {
                         sh """
                             ${SONAR_SCANNER_HOME}/bin/sonar-scanner \
@@ -42,6 +46,7 @@ pipeline {
                         env.VERSION = '1'
                     }
                     echo "Building Docker image with version ${env.VERSION}."
+                    slackSend(channel: "${SLACK_CHANNEL}", message: "Building Docker image with version ${env.VERSION}", tokenCredentialId: "${SLACK_CREDENTIALS_ID}")
                 }
             }
         }
@@ -50,8 +55,6 @@ pipeline {
             steps {
                 script {
                     def imageName = "nodeapp${env.VERSION}"
-
-                    // Build the Docker image with the new version
                     sh "docker build -t ${imageName} ."
                 }
             }
@@ -63,21 +66,14 @@ pipeline {
                     def dockerHubRepo = "shahmeerali/nodejs_application_with_docker"
                     def imageName = "nodeapp${env.VERSION}"
 
-                    // Log in to Docker Hub
                     withCredentials([usernamePassword(credentialsId: 'Docker-hub', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
                         sh "echo \$DOCKER_PASSWORD | docker login -u \$DOCKER_USERNAME --password-stdin"
                     }
 
-                    // Tag the image for Docker Hub
                     sh "docker tag ${imageName} ${dockerHubRepo}:${imageName}"
-
-                    // Push the image to Docker Hub
                     sh "docker push ${dockerHubRepo}:${imageName}"
 
-                    // Remove the local image with the `latest` tag if it exists
-                    sh """
-                        docker rmi -f nodeapp:latest || true
-                    """
+                    sh "docker rmi -f nodeapp:latest || true"
                 }
             }
         }
@@ -86,43 +82,45 @@ pipeline {
             steps {
                 script {
                     def dockerHubRepo = "shahmeerali/nodejs_application_with_docker"
-
-                    // Clean up old images in Docker Hub (not tagged with the latest version)
-                    sh """
-                        docker images --format "{{.Repository}}:{{.Tag}}" | grep '^nodeapp' | grep -v ':${env.VERSION}' | xargs -r docker rmi -f || true
-                    """
+                    sh "docker images --format \"{{.Repository}}:{{.Tag}}\" | grep '^nodeapp' | grep -v ':${env.VERSION}' | xargs -r docker rmi -f || true"
                 }
             }
         }
 
         stage('Deploy New Container') {
-    steps {
-        script {
-            def imageName = "shahmeerali/nodejs_application_with_docker:nodeapp${env.VERSION}"
-            def containerName = "nodeapp"
+            steps {
+                script {
+                    def imageName = "shahmeerali/nodejs_application_with_docker:nodeapp${env.VERSION}"
+                    def containerName = "nodeapp"
 
-            // Stop and remove the currently running container if it exists
-            sh """
-                docker stop ${containerName} || true
-                docker rm ${containerName} || true
-            """
+                    sh """
+                        docker stop ${containerName} || true
+                        docker rm ${containerName} || true
+                    """
 
-            // Run the new container with the versioned image
-            sh """
-                docker run -d --name ${containerName} -p 3000:3000 ${imageName}
-            """
+                    sh "docker run -d --name ${containerName} -p 3000:3000 ${imageName}"
+
+                    slackSend(channel: "${SLACK_CHANNEL}", message: "Deployed new container with version ${env.VERSION}", tokenCredentialId: "${SLACK_CREDENTIALS_ID}")
+                }
+            }
         }
-    }
-}
-
 
         stage('Update Version File') {
             steps {
                 script {
-                    // Update the version file with the new version number
                     writeFile file: VERSION_FILE, text: "${env.VERSION}"
+                    slackSend(channel: "${SLACK_CHANNEL}", message: "Version file updated to version ${env.VERSION}", tokenCredentialId: "${SLACK_CREDENTIALS_ID}")
                 }
             }
+        }
+    }
+
+    post {
+        success {
+            slackSend(channel: "${SLACK_CHANNEL}", message: "Pipeline completed successfully with version ${env.VERSION}", tokenCredentialId: "${SLACK_CREDENTIALS_ID}")
+        }
+        failure {
+            slackSend(channel: "${SLACK_CHANNEL}", message: "Pipeline failed", tokenCredentialId: "${SLACK_CREDENTIALS_ID}")
         }
     }
 }
