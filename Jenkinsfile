@@ -3,6 +3,8 @@ pipeline {
 
     environment {
         VERSION_FILE = 'version.txt'
+        // Define the SonarQube environment variable
+        SONAR_SCANNER_HOME = tool 'SonarScanner'
     }
 
     stages {
@@ -11,6 +13,24 @@ pipeline {
                 git branch: 'master',
                     credentialsId: 'github-credential',
                     url: "https://github.com/shahmeerali74/nodejs_application_with_docker.git"
+            }
+        }
+
+        stage('SonarQube Scan') {
+            steps {
+                script {
+                    // Running SonarQube analysis
+                    withSonarQubeEnv('Sonarqube') {
+                        sh """
+                            ${SONAR_SCANNER_HOME}/bin/sonar-scanner \
+                            -Dsonar.projectKey=nodejs_application_with_docker \
+                            -Dsonar.sources=. \
+                            -Dsonar.language=js \
+                            -Dsonar.host.url=http://practice-vm-shahmeer.tail9d8d3f.ts.net:9000/ \
+                            -Dsonar.login=sqp_59f7c5dd4f17c02254ab29df9547292f88b7ec5e
+                        """
+                    }
+                }
             }
         }
 
