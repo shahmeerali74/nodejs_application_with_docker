@@ -4,8 +4,11 @@ pipeline {
     environment {
         VERSION_FILE = 'version.txt'
         SONAR_SCANNER_HOME = tool 'SonarScanner'
+        sonar_token="${env.sonarqube_token}"
+        sonar_url="${env.sonar_url}"
         SLACK_CHANNEL = 'devops-jenkins-node-app'
         SLACK_CREDENTIALS_ID = 'slack-credentials-id' // Define this in Jenkins' credentials
+        
     }
 
     stages {
@@ -28,8 +31,8 @@ pipeline {
                             -Dsonar.projectKey=nodejs_application_with_docker \
                             -Dsonar.sources=. \
                             -Dsonar.language=js \
-                            -Dsonar.host.url=http://practice-vm-shahmeer.tail9d8d3f.ts.net:9000/ \
-                            -Dsonar.login=sqp_59f7c5dd4f17c02254ab29df9547292f88b7ec5e
+                            -Dsonar.host.url=${sonar_url} \
+                            -Dsonar.login=${sonar_token}
                         """
                     }
                 }
@@ -109,7 +112,7 @@ pipeline {
             steps {
                 script {
                     writeFile file: VERSION_FILE, text: "${env.VERSION}"
-                    slackSend(channel: "${SLACK_CHANNEL}", message: "Version file updated to version ${env.VERSION}", tokenCredentialId: "${SLACK_CREDENTIALS_ID}")
+                    slackSend(channel: "${SLACK_CHANNEL}", message: "Version file updated to version ${env.VERSION+1}", tokenCredentialId: "${SLACK_CREDENTIALS_ID}")
                 }
             }
         }
