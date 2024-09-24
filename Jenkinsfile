@@ -112,7 +112,7 @@ pipeline {
             steps {
                 script {
                     writeFile file: VERSION_FILE, text: "${env.VERSION}"
-                    slackSend(channel: "${SLACK_CHANNEL}", message: "Version file updated to version ${env.VERSION+1}", tokenCredentialId: "${SLACK_CREDENTIALS_ID}")
+                    slackSend(channel: "${SLACK_CHANNEL}", message: "Version file updated to version ${env.VERSION}", tokenCredentialId: "${SLACK_CREDENTIALS_ID}")
                 }
             }
         }
